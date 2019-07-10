@@ -92,7 +92,8 @@ def generate_HTML_page(frontmatter, body: str):
         <body>{{html}}</body>
     </html>
     """
-    doc = jinja2.Template(template).render(inferredTitle=meta['title'][0], css=pdfCSS, html=body)
+    # doc = jinja2.Template(template).render(inferredTitle=meta['title'][0], css=pdfCSS, html=body)
+    doc = jinja2.Template(template).render(inferredTitle='title', css=pdfCSS, html=body)
     return doc
 
 
@@ -121,7 +122,7 @@ def generate_HTML_header():
     open(path.join(__dirname, 'header.html'), 'w').write(doc)
 
 
-def generate_PDF(frontmatter, body: str):
+def generate_PDF(frontmatter, body: str, output_path: str):
     global path
 
     template = """
@@ -139,11 +140,11 @@ def generate_PDF(frontmatter, body: str):
     </html>
     """
     doc = jinja2.Template(template).render(
-        inferredTitle=meta['title'][0], 
+        inferredTitle='title', 
         css=pdfCSS, 
         html=body)
-        
-    pdfkit.from_string(doc, 'test.pdf', options={
+
+    pdfkit.from_string(doc, output_path, options={
         'page-size': 'A4',
         'margin-top': '25mm',
         'margin-right': '10mm',
@@ -163,7 +164,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     files = getFilePaths(args.files)
-    meta, body = generate_body(readFile(path.join(inputDir, files[0])))
-    page = generate_HTML_page(meta, body)
-    generate_HTML_header()
-    generate_PDF(meta, body)
+    for f in files:
+        meta, body = generate_body(readFile(path.join(inputDir, f)))
+        page = generate_HTML_page(meta, body)
+        generate_HTML_header()
+        generate_PDF(meta, body, path.join(outputDir, f.replace('.md', '.pdf')))
