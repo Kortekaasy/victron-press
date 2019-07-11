@@ -52,6 +52,8 @@
     "@sentry/browser": "^5.4.3",
     "@sentry/integrations": "^5.4.2",
     "@toast-ui/vue-editor": "^1.1.1",
+    "@vuepress/plugin-pwa": "^1.0.2",
+    "@vuepress/shared-utils": "^1.0.2",
     "axios": "^0.19.0",
     "easy-pdf-merge": "^0.2.1",
     "hummus": "^1.0.104",
