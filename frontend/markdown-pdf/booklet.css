@@ -1,13 +1,16 @@
-body { /* loading in this css file means we're making a booklet, so change the font-size */
+body {
+    /* loading in this css file means we're making a booklet, so change the font-size */
     font-size: 8px;
     margin-right: 10mm;
 }
 
-header { /* loading in this css file means we're making a booklet, so change the font-size */
+header {
+    /* loading in this css file means we're making a booklet, so change the font-size */
     font-size: 6px;
 }
 
-footer { /* loading in this css file means we're making a booklet, so change the font-size */
+footer {
+    /* loading in this css file means we're making a booklet, so change the font-size */
     font-size: 6px;
     color: black;
 }
@@ -16,8 +19,8 @@ div.sidebar {
     position: fixed;
     z-index: 1000;
     top: 20%;
-    right: 0px; 
-    width: 50px; 
+    right: 0px;
+    width: 50px;
     margin-top: 50px;
     margin-bottom: auto;
 }
@@ -30,7 +33,7 @@ table.sidebar {
     color: black;
     transform-origin: right 10 0;
     translate: 20 100;
-    transform:rotate(90deg);
+    transform: rotate(90deg);
     float: left;
 }
 
@@ -89,4 +92,7 @@ h6 {
     /* font-weight: 700; */
 }
 
-.empty-page { page-break-after: always; visibility: hidden; }
+.empty-page {
+    page-break-after: always;
+    visibility: hidden;
+}
