@@ -213,7 +213,8 @@ Promise.all([
                     // Check whether the markdown file exists in the root folder
                     if (fs.existsSync(path.join(inputDir, manual))) {
                         // Parse Frontmatter for config extraction
-                        const {data, content} = parseFrontmatter(
+                        // prettier-ignore
+                        const { data, content } = parseFrontmatter( // eslint-disable-line no-unused-vars
                             await fs.readFile(
                                 path.join(inputDir, manual),
                                 'utf8'
@@ -391,7 +392,7 @@ Promise.all([
  */
 async function generateBodyFromMarkdown(md, filePath) {
     // Parse the frontmatter of the markdown file
-    const {data, content} = parseFrontmatter(md);
+    const { data, content } = parseFrontmatter(md); // eslint-disable-line no-unused-vars
 
     // Generate the HTML content for the markdown file using markdown-it
     const html =
@@ -432,7 +433,7 @@ async function generateBodyFromMarkdown(md, filePath) {
  */
 async function generateSinglePDF(filePath, browser, html, css, logoSVG) {
     // Parse the frontmatter of the markdown file
-    const {data, content} = parseFrontmatter(
+    const { data, content } = parseFrontmatter(
         await fs.readFile(path.join(inputDir, filePath), 'utf8')
     );
 
@@ -535,7 +536,7 @@ async function generateFrontPagePDF(
     url
 ) {
     // Parse the frontmatter of the markdown file
-    const {data, content} = parseFrontmatter(
+    const { data, content } = parseFrontmatter(
         await fs.readFile(path.join(inputDir, filePath), 'utf8')
     );
 
