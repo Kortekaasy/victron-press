@@ -33,10 +33,20 @@ footer {
     font-size: 9px;
     font-weight: 400;
     padding: 0.25cm 1cm;
-    text-align: right;
+    text-align: center;
     text-size-adjust: 100%;
     user-select: none;
     width: 100%;
+}
+
+footer > span{
+    margin-left: auto;
+    margin-right: auto;
+}
+
+span.doc-title {
+    color: lightgray;
+    float: right;
 }
 
 p {
@@ -482,8 +492,14 @@ h1 {
     counter-reset: h2;
 }
 
-h2 {
+h2:nth-child(1n+1) {
     counter-reset: h3;
+    break-before: page;
+}
+
+h2:nth-child(0n+1) {
+    counter-reset: h3;
+    break-before: avoid !important;
 }
 
 h3 {
