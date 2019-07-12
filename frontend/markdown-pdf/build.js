@@ -48,7 +48,7 @@ const markdownitRenderer = new markdownit({
     .use(require('markdown-it-emoji'))
     .use(require('markdown-it-anchor'), {
         slugify: require('@vuepress/shared-utils').slugify,
-        permalink: false,
+        permalink: true,
         permalinkBefore: true,
         permalinkSymbol: '#',
     })
@@ -188,10 +188,9 @@ Promise.all([
                 fs
                     .readFile(path.join(inputDir, filePath), 'utf8')
                     .then(md => generateBodyFromMarkdown(md, filePath))
-                    .then(([frontmatter_data, frontmatter_content, html]) =>
+                    .then(([frontmatter, html]) =>
                         generateSinglePDF(
-                            frontmatter_data,
-                            frontmatter_content,
+                            frontmatter,
                             filePath,
                             browser,
                             html,
@@ -224,24 +223,24 @@ Promise.all([
                 // Loop over all distinct markdown files
                 Array.from(languages.keys(), async manual => {
                     // Create variable to store config options of this manual
-                    let frontmatter_data, frontmatter_content, booklet_config;
+                    let frontmatter, booklet_config;
 
                     // Check whether the markdown file exists in the root folder
                     if (fs.existsSync(path.join(inputDir, manual))) {
                         // Parse Frontmatter for config extraction
                         // prettier-ignore
-                        frontmatter_data, frontmatter_content = parseFrontmatter( // eslint-disable-line no-unused-vars
+                        frontmatter = parseFrontmatter( // eslint-disable-line no-unused-vars
                             await fs.readFile(
                                 path.join(inputDir, manual),
                                 'utf8'
                             )
                         );
 
-                        // If there is frontmatter data, and a config, generate a booklet, else not
-                        if (frontmatter_data && frontmatter_data.config) {
-                            // Read booklet config from frontmatter
-                            booklet_config = frontmatter_data.config;
-                        } else {
+                        // Read booklet config from frontmatter
+                        booklet_config = frontmatter.data.config;
+
+                        // If there is no config, we don't need to generate a booklet
+                        if (!frontmatter.data.config) {
                             return;
                         }
                     } else {
@@ -277,8 +276,7 @@ Promise.all([
                                 // Generate the front page of this booklet
                                 const frontPage = generateFrontPagePDF(
                                     browser,
-                                    frontmatter_data,
-                                    frontmatter_content,
+                                    frontmatter,
                                     manual,
                                     css,
                                     fpCSS,
@@ -404,11 +402,11 @@ Promise.all([
  */
 async function generateBodyFromMarkdown(md, filePath) {
     // Parse the frontmatter of the markdown file
-    const { data, content } = parseFrontmatter(md); // eslint-disable-line no-unused-vars
+    const frontmatter = parseFrontmatter(md); // eslint-disable-line no-unused-vars
 
     // Generate the HTML content for the markdown file using markdown-it
     const html =
-        markdownitRenderer.render(content, {
+        markdownitRenderer.render(frontmatter.content, {
             basePath: inputDir,
             selfPath: path.join(inputDir, filePath),
         }) || '&nbsp;'; // Prevent puppeteer crash on empty body
@@ -430,15 +428,14 @@ async function generateBodyFromMarkdown(md, filePath) {
     }
     languages.get(file).set(lang, result);
 
-    return [data, content, result];
+    return [frontmatter, result];
 }
 
 /**
  * This function is used to generate a single PDF for an HTML page, given
  * it has the path to the used markdown file, a puppeteer browser, HTML contents,
  * CSS and the Victron logo
- * @param {*} frontmatter_data Frontmatter data of the markdown file corresponding to the (to-be) generated PDF
- * @param {*} frontmatter_content Frontmatter content of the markdown file corresponding to the (to-be) generated PDF
+ * @param {*} frontmatter Frontmatter of the markdown file corresponding to the (to-be) generated PDF
  * @param {*} filePath Path to the used markdown file (used to get frontmatter)
  * @param {*} browser Puppeteer browser instance
  * @param {*} html HTML content for the PDF page
@@ -446,8 +443,7 @@ async function generateBodyFromMarkdown(md, filePath) {
  * @param {*} logoSVG Logo of victron energy
  */
 async function generateSinglePDF(
-    frontmatter_data,
-    frontmatter_content,
+    frontmatter,
     filePath,
     browser,
     html,
@@ -455,7 +451,7 @@ async function generateSinglePDF(
     logoSVG
 ) {
     // Infer the title from the frontmatter
-    const inferredTitle = inferTitle(frontmatter_data, frontmatter_content);
+    const inferredTitle = inferTitle(frontmatter.data, frontmatter.content);
 
     // Render a PDF with the provided contents, and return a buffer containing the PDF
     return renderPDF(
@@ -537,8 +533,7 @@ async function renderPDF(
 /**
  * This function is used to generate the front page of a booklet
  * @param {*} browser Puppeteer browser instance
- * @param {*} frontmatter_data Frontmatter data of the booklet markdown file
- * @param {*} frontmatter_content Frontmatter content of the booklet markdown file
+ * @param {*} frontmatter Frontmatter of the booklet markdown file
  * @param {*} filePath Path to the markdown file for the booklet
  * @param {*} css CSS for the front page
  * @param {*} fp_css extra CSS front page
@@ -547,8 +542,7 @@ async function renderPDF(
  */
 async function generateFrontPagePDF(
     browser,
-    frontmatter_data,
-    frontmatter_content,
+    frontmatter,
     filePath,
     css,
     fp_css,
@@ -557,10 +551,10 @@ async function generateFrontPagePDF(
     url
 ) {
     // Read the booklet config
-    const booklet_config = frontmatter_data.config;
+    const booklet_config = frontmatter.data.config;
 
     // Infer the title of the front page
-    const inferredTitle = inferTitle(frontmatter_data, frontmatter_content);
+    const inferredTitle = inferTitle(frontmatter.data, frontmatter.content);
 
     // Generate QR code with link to online documentation
     const qrCode = await QRCode.toDataURL(url);
