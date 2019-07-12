@@ -8,8 +8,8 @@ const puppeteer = require('puppeteer');
 const { inferTitle, parseFrontmatter } = require('@vuepress/shared-utils');
 const hummus = require('hummus');
 const memoryStreams = require('memory-streams');
-var QRCode = require('qrcode');
-var moment = require('moment');
+const QRCode = require('qrcode');
+const moment = require('moment');
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', function(err, promise) {
@@ -48,9 +48,9 @@ const markdownitRenderer = new markdownit({
     .use(require('markdown-it-emoji'))
     .use(require('markdown-it-anchor'), {
         slugify: require('@vuepress/shared-utils').slugify,
-        permalink: true,
+        permalink: false,
         permalinkBefore: true,
-        permalinkSymbol: '',
+        permalinkSymbol: '#',
     })
     .use(require('markdown-it-table-of-contents'), {
         slugify: require('@vuepress/shared-utils').slugify,
@@ -77,7 +77,7 @@ const markdownitRenderer = new markdownit({
 
 const args = process.argv.slice(2);
 
-var languages = new Map();
+let languages = new Map();
 
 // Define a mapping between language codes and translation of 'Manual'
 const manual_translations = {
@@ -111,9 +111,15 @@ const ordering = [
     'tr',
 ];
 
-var DOCS_BASE_URL = process.env.DOCS_BASE_URL
-    ? process.env.DOCS_BASE_URL
-    : 'https://docs.victronenergy.com/';
+let DOCS_BASE_URL;
+if (process.env.DOCS_BASE_URL) {
+    DOCS_BASE_URL = process.env.DOCS_BASE_URL;
+} else {
+    DOCS_BASE_URL = 'https://docs.victronenergy.com/';
+    console.warn(
+        `Variable DOCS_BASE_URL not found in environment; Using ${DOCS_BASE_URL} as DOCS_BASE_URL`
+    );
+}
 
 Promise.all([
     fs.ensureDir(outputDir),
@@ -136,7 +142,6 @@ Promise.all([
                     ? ['--no-sandbox']
                     : []
             ),
-        //devtools: true
     }),
     Promise.all([
         fs.readFile(path.join(__dirname, 'pdf.css')),
@@ -183,8 +188,16 @@ Promise.all([
                 fs
                     .readFile(path.join(inputDir, filePath), 'utf8')
                     .then(md => generateBodyFromMarkdown(md, filePath))
-                    .then(html =>
-                        generateSinglePDF(filePath, browser, html, css, logoSVG)
+                    .then(([frontmatter_data, frontmatter_content, html]) =>
+                        generateSinglePDF(
+                            frontmatter_data,
+                            frontmatter_content,
+                            filePath,
+                            browser,
+                            html,
+                            css,
+                            logoSVG
+                        )
                     ),
                 fs.ensureDir(
                     // Ensure the necessary output directories exist
@@ -196,7 +209,7 @@ Promise.all([
                         fs.writeFile(
                             path.join(
                                 outputDir,
-                                filePath.replace('.md', '.pdf')
+                                filePath.replace(/\.md$/, '.pdf')
                             ),
                             pdf
                         )
@@ -210,30 +223,25 @@ Promise.all([
             Promise.all(
                 // Loop over all distinct markdown files
                 Array.from(languages.keys(), async manual => {
+                    // Create variable to store config options of this manual
+                    let frontmatter_data, frontmatter_content, booklet_config;
+
                     // Check whether the markdown file exists in the root folder
                     if (fs.existsSync(path.join(inputDir, manual))) {
                         // Parse Frontmatter for config extraction
                         // prettier-ignore
-                        const { data, content } = parseFrontmatter( // eslint-disable-line no-unused-vars
+                        frontmatter_data, frontmatter_content = parseFrontmatter( // eslint-disable-line no-unused-vars
                             await fs.readFile(
                                 path.join(inputDir, manual),
                                 'utf8'
                             )
                         );
 
-                        // Combine all config elements in the frontmatter into 1 dict
-                        var config = {};
-                        if (data.config) {
-                            data.config.forEach(elem => {
-                                config[elem.name] = elem.content;
-                            });
+                        // If there is frontmatter data, and a config, generate a booklet, else not
+                        if (frontmatter_data && frontmatter_data.config) {
+                            // Read booklet config from frontmatter
+                            booklet_config = frontmatter_data.config;
                         } else {
-                            // If there is no config, this md file does not need to be converted to a booklet
-                            return;
-                        }
-
-                        // If we don't need to generate a booklet for this md file, skip this file
-                        if (!config.generate_booklet) {
                             return;
                         }
                     } else {
@@ -245,18 +253,20 @@ Promise.all([
 
                     // Create a booklet for each language set in the frontmatter
                     return Promise.all(
-                        Array.from(Object.keys(config.languages)).map(
+                        Array.from(Object.keys(booklet_config.languages)).map(
                             async set => {
                                 // Create an array with the different languages + ordering for this booklet
                                 const langs = ordering.filter(value => {
                                     return (
                                         languages.get(manual).has(value) &&
-                                        config.languages[set].includes(value)
+                                        booklet_config.languages[set].includes(
+                                            value
+                                        )
                                     );
                                 });
 
                                 // Print a warning to console.error when a language is specified in frontmatter, but no html is generated for that language.
-                                config.languages[set].forEach(lang => {
+                                booklet_config.languages[set].forEach(lang => {
                                     if (!languages.get(manual).has(lang)) {
                                         console.error(
                                             `Language ${lang} is specified in front matter of ${manual}, but cannot find markdown file ${lang}/${manual}`
@@ -267,6 +277,8 @@ Promise.all([
                                 // Generate the front page of this booklet
                                 const frontPage = generateFrontPagePDF(
                                     browser,
+                                    frontmatter_data,
+                                    frontmatter_content,
                                     manual,
                                     css,
                                     fpCSS,
@@ -274,15 +286,15 @@ Promise.all([
                                     langs,
                                     /* Dynamically generate link to online documentation */
                                     DOCS_BASE_URL +
-                                        manual.replace('.md', '.html')
+                                        manual.replace(/\.md$/, '.html')
                                 );
 
                                 //  Create an empty map to store, per language, generated PDF's with and without sidebar
-                                var sidebarPDFs = new Map();
-                                var noSidebarPDFs = new Map();
+                                let sidebarPDFs = new Map();
+                                let noSidebarPDFs = new Map();
 
                                 // Store the page count so that we can set the correct page number per PDF
-                                var pageCount = 1;
+                                let pageCount = 1;
 
                                 // Loop through the languages that should be contained in this PDF
                                 for (const lang of langs) {
@@ -296,7 +308,7 @@ Promise.all([
                                         lang,
                                         await generateBooklet(
                                             browser,
-                                            config.generic_name,
+                                            booklet_config.generic_name,
                                             html,
                                             css,
                                             bookletCSS,
@@ -313,7 +325,7 @@ Promise.all([
                                         lang,
                                         await generateBooklet(
                                             browser,
-                                            config.generic_name,
+                                            booklet_config.generic_name,
                                             html,
                                             css,
                                             bookletCSS,
@@ -334,13 +346,13 @@ Promise.all([
                                 }
 
                                 // Merge PDF's with and without side bar, so that we only get a side bar on the right pages of the booklet
-                                var merged = await mergeLeftRight(
+                                const merged = await mergeLeftRight(
                                     sidebarPDFs,
                                     noSidebarPDFs
                                 );
 
                                 // Create an array to store the PDF's we want to merge into one booklet
-                                var pdfs = [await frontPage, await emptyPage];
+                                let pdfs = [await frontPage, await emptyPage];
 
                                 // Loop through through the languages in order
                                 for (const lang of ordering) {
@@ -368,7 +380,7 @@ Promise.all([
                                     path.join(
                                         outputDir,
                                         `manual_${set}_${manual.replace(
-                                            '.md',
+                                            /\.md$/,
                                             '.pdf'
                                         )}`
                                     ),
@@ -418,27 +430,32 @@ async function generateBodyFromMarkdown(md, filePath) {
     }
     languages.get(file).set(lang, result);
 
-    return result;
+    return [data, content, result];
 }
 
 /**
  * This function is used to generate a single PDF for an HTML page, given
  * it has the path to the used markdown file, a puppeteer browser, HTML contents,
  * CSS and the Victron logo
+ * @param {*} frontmatter_data Frontmatter data of the markdown file corresponding to the (to-be) generated PDF
+ * @param {*} frontmatter_content Frontmatter content of the markdown file corresponding to the (to-be) generated PDF
  * @param {*} filePath Path to the used markdown file (used to get frontmatter)
  * @param {*} browser Puppeteer browser instance
  * @param {*} html HTML content for the PDF page
  * @param {*} css CSS for the PDF page
  * @param {*} logoSVG Logo of victron energy
  */
-async function generateSinglePDF(filePath, browser, html, css, logoSVG) {
-    // Parse the frontmatter of the markdown file
-    const { data, content } = parseFrontmatter(
-        await fs.readFile(path.join(inputDir, filePath), 'utf8')
-    );
-
+async function generateSinglePDF(
+    frontmatter_data,
+    frontmatter_content,
+    filePath,
+    browser,
+    html,
+    css,
+    logoSVG
+) {
     // Infer the title from the frontmatter
-    const inferredTitle = inferTitle(data, content);
+    const inferredTitle = inferTitle(frontmatter_data, frontmatter_content);
 
     // Render a PDF with the provided contents, and return a buffer containing the PDF
     return renderPDF(
@@ -520,6 +537,8 @@ async function renderPDF(
 /**
  * This function is used to generate the front page of a booklet
  * @param {*} browser Puppeteer browser instance
+ * @param {*} frontmatter_data Frontmatter data of the booklet markdown file
+ * @param {*} frontmatter_content Frontmatter content of the booklet markdown file
  * @param {*} filePath Path to the markdown file for the booklet
  * @param {*} css CSS for the front page
  * @param {*} fp_css extra CSS front page
@@ -528,6 +547,8 @@ async function renderPDF(
  */
 async function generateFrontPagePDF(
     browser,
+    frontmatter_data,
+    frontmatter_content,
     filePath,
     css,
     fp_css,
@@ -535,21 +556,11 @@ async function generateFrontPagePDF(
     languages,
     url
 ) {
-    // Parse the frontmatter of the markdown file
-    const { data, content } = parseFrontmatter(
-        await fs.readFile(path.join(inputDir, filePath), 'utf8')
-    );
-
-    // Combine all config elements in the frontmatter into 1 object
-    var config = {};
-    data.config.forEach(elem => {
-        config[elem.name] = elem.content;
-    });
+    // Read the booklet config
+    const booklet_config = frontmatter_data.config;
 
     // Infer the title of the front page
-    // console.log(data);
-    // console.log(content);
-    const inferredTitle = inferTitle(data, content);
+    const inferredTitle = inferTitle(frontmatter_data, frontmatter_content);
 
     // Generate QR code with link to online documentation
     const qrCode = await QRCode.toDataURL(url);
@@ -577,9 +588,9 @@ async function generateFrontPagePDF(
                     }
                 </table>
                 <div class="title">
-                    <b>${config.generic_name}</b><br>
+                    <b>${booklet_config.generic_name}</b><br>
                     <i>${moment().format('YYYY-MM-MM hh:mm:ss')}</i><br>
-                    ${config.product_nos.join('<br>')}
+                    ${booklet_config.product_nos.join('<br>')}
                 </div>
                 <img src="${qrCode}" class="qrcode" />
             </div>
@@ -634,7 +645,7 @@ async function renderEmptyPage(browser, format = 'A4') {
  * @param {*} css General CSS for the booklet
  * @param {*} bookletCSS Extra CSS for the booklet
  * @param {*} logoSVG SVG file containing the logo of Victron Energy
- * @param {*} lang Language used in the HTML
+ * @param {*} currentLang Language used in the HTML
  * @param {*} languages All languages used in the booklet (necessary when display_sidebar is true)
  * @param {*} display_sidebar Boolean indicating whether we should display the sidebar
  * @param {*} pageNumber Pagenumber to start numbering from
@@ -646,7 +657,7 @@ async function generateBooklet(
     css,
     bookletCSS,
     logoSVG,
-    lang,
+    currentLang,
     languages,
     display_sidebar = true,
     pageNumber = 1
@@ -662,9 +673,7 @@ async function generateBooklet(
     <body>
         ${
             /* Add `pageNumber` empty pages to the HTML in order to increase the page number */
-            [...Array(pageNumber).keys()].map(
-                () => `<div class="empty-page">empty</div>`
-            )
+            '<div class="empty-page">empty</div>'.repeat(pageNumber)
         }
         <div class="">
             <div class="sidebar" ${
@@ -678,11 +687,11 @@ async function generateBooklet(
                         ${
                             /* Create a side bar from `languages`, where `lang` is selected */
                             languages
-                                .map(lang_ => {
-                                    if (lang_ === lang) {
-                                        return `<td class="sidebar selected">${lang_}</td>`;
+                                .map(lang => {
+                                    if (lang === currentLang) {
+                                        return `<td class="sidebar selected">${lang}</td>`;
                                     } else {
-                                        return `<td class="sidebar">${lang_}</td>`;
+                                        return `<td class="sidebar">${lang}</td>`;
                                     }
                                 })
                                 .join('')
@@ -717,7 +726,7 @@ async function generateBooklet(
  */
 async function getPageCount(pdf) {
     // Create a Stream of the PDF contents
-    var pdfStream = hummus.createReader(
+    let pdfStream = hummus.createReader(
         new hummus.PDFRStreamForBuffer(await pdf)
     );
 
@@ -734,12 +743,12 @@ async function getPageCount(pdf) {
  */
 async function mergeLeftRight(sidebarPDFs, noSidebarPDFs, switch_LR = false) {
     // Create a mapping to store the merged PDFs
-    var result = new Map();
+    let result = new Map();
 
     // Loop through each of the keys in the mapping
     for (const key of sidebarPDFs.keys()) {
         // Determine the left and the right page of the booklet, based on `switch_LR`
-        var left, right;
+        let left, right;
         if (switch_LR) {
             left = noSidebarPDFs.get(key);
             right = sidebarPDFs.get(key);
@@ -749,30 +758,30 @@ async function mergeLeftRight(sidebarPDFs, noSidebarPDFs, switch_LR = false) {
         }
 
         // Create an output stream for the merged pdf
-        var outStream = new memoryStreams.WritableStream();
+        const outStream = new memoryStreams.WritableStream();
 
         try {
             // Create input streams for the left and right PDF
-            var pdfStreamLeft = new hummus.PDFRStreamForBuffer(await left);
-            var pdfStreamRight = new hummus.PDFRStreamForBuffer(await right);
+            const pdfStreamLeft = new hummus.PDFRStreamForBuffer(await left);
+            const pdfStreamRight = new hummus.PDFRStreamForBuffer(await right);
 
             // Create a writer for the output PDF
-            var pdfWriter = hummus.createWriter(
+            const pdfWriter = hummus.createWriter(
                 new hummus.PDFStreamForResponse(outStream)
             );
 
             // Create copying contexts for the left and right PDF so that we
             // can copy pages from these PDFs
-            var leftCopyingContext = pdfWriter.createPDFCopyingContext(
+            const leftCopyingContext = pdfWriter.createPDFCopyingContext(
                 pdfStreamLeft
             );
-            var rightCopyingContext = pdfWriter.createPDFCopyingContext(
+            const rightCopyingContext = pdfWriter.createPDFCopyingContext(
                 pdfStreamRight
             );
 
             // Loop through all pages, and append alternating left and right pages.
             for (
-                var i = 0;
+                let i = 0;
                 i <
                 leftCopyingContext.getSourceDocumentParser().getPagesCount();
                 i++
@@ -787,7 +796,7 @@ async function mergeLeftRight(sidebarPDFs, noSidebarPDFs, switch_LR = false) {
 
             // Close the PDF and write it to a Buffer
             pdfWriter.end();
-            var newBuffer = outStream.toBuffer();
+            const newBuffer = outStream.toBuffer();
             outStream.end();
 
             // Add the merged pdf to the result mapping
@@ -808,28 +817,28 @@ async function mergeLeftRight(sidebarPDFs, noSidebarPDFs, switch_LR = false) {
  */
 async function mergePDFs(...pdfBuffers) {
     // Create an output stream for the combined PDF
-    var outStream = new memoryStreams.WritableStream();
+    const outStream = new memoryStreams.WritableStream();
 
     try {
         // Create an input stream for each of the PDFs we want to combine
-        var pdfStreams = pdfBuffers.map(
+        const pdfStreams = pdfBuffers.map(
             async buf => new hummus.PDFRStreamForBuffer(await buf)
         );
 
         // Create a writer for the combined output PDF, from the first PDF (front page)
-        var pdfWriter = hummus.createWriterToModify(
+        const pdfWriter = hummus.createWriterToModify(
             await pdfStreams[0],
             new hummus.PDFStreamForResponse(outStream)
         );
 
         // Add all subsequent PDFs to the output PDF
-        for (var i = 1; i < pdfStreams.length; i++) {
+        for (let i = 1; i < pdfStreams.length; i++) {
             pdfWriter.appendPDFPagesFromPDF(await pdfStreams[i]);
         }
 
         // Close the PDF and write it to a Buffer
         pdfWriter.end();
-        var newBuffer = outStream.toBuffer();
+        const newBuffer = outStream.toBuffer();
         outStream.end();
 
         // Return the combined PDF
