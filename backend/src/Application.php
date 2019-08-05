@@ -148,6 +148,8 @@ class Application implements RequestHandlerInterface
         $this->router->map('POST', '/api/v1/lock', [$this, 'handleLock']);
         $this->router->map('POST', '/api/v1/unlock', [$this, 'handleUnlock']);
 
+        $this->router->map('GET', '/', [$this, 'handleSlash']);
+
         // Handlers for retrieving files
         $this->router->map(
             'GET',
@@ -174,6 +176,14 @@ class Application implements RequestHandlerInterface
         } catch (HttpException $e) {
             return new TextResponse($e->getStatusCode() . ' ' . $e->getMessage(), $e->getStatusCode());
         }
+    }
+
+    /**
+     * Handle an '/' GET request.
+     */
+    public function handleSlash(ServerRequestInterface $request): ResponseInterface
+    {
+       return new RedirectResponse('https://victronenergy.com');
     }
 
     /**
